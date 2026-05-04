@@ -9,7 +9,9 @@
       "Bash(git push *)",
       "Bash(git ls-tree *)",
       "Bash(npm run *)",
-      "Bash(npm install *)"
+      "Bash(npm install *)",
+      "Bash(vercel *)",
+      "Bash(curl *)"
     ]
   }
 }
