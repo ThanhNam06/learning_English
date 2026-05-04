@@ -7,7 +7,9 @@
       "Bash(export FILTER_BRANCH_SQUELCH_WARNING=1)",
       "Bash(git commit *)",
       "Bash(git push *)",
-      "Bash(git ls-tree *)"
+      "Bash(git ls-tree *)",
+      "Bash(npm run *)",
+      "Bash(npm install *)"
     ]
   }
 }
