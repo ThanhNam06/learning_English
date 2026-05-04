@@ -3,7 +3,9 @@
     "allow": [
       "Bash(git filter-branch *)",
       "Bash(git add *)",
-      "Bash(git commit -m 'chore: remove old Vite codebase files *)"
+      "Bash(git commit -m 'chore: remove old Vite codebase files *)",
+      "Bash(export FILTER_BRANCH_SQUELCH_WARNING=1)",
+      "Bash(git commit *)"
     ]
   }
 }
