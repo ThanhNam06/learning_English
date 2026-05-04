@@ -13,7 +13,9 @@
       "Bash(vercel *)",
       "Bash(curl *)",
       "Bash(node *)",
-      "Bash(claude mcp *)"
+      "Bash(claude mcp *)",
+      "Bash(netstat -ano)",
+      "Bash(findstr \"5173\")"
     ]
   }
 }

@@ -10,10 +10,10 @@
   }
 
   body {
-    background-color: #060813;
+    background-color: #060812;
     color: #e2e8f0;
     font-family: system-ui, -apple-system, sans-serif;
-    background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080"><rect fill="%23060813" width="1920" height="1080"/></svg>');
+    background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1920 1080"><rect fill="%23060812" width="1920" height="1080"/></svg>');
     background-size: cover;
     background-attachment: fixed;
   }
