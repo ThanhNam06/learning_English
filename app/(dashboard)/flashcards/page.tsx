@@ -1,6 +1,8 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { motion, AnimatePresence } from 'framer-motion'
+import { Layers, Trash2, BookOpen, ArrowRight } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { updateDailyProgress, getFlashcardStats } from '@/lib/progress'
@@ -27,20 +29,62 @@ type Stats = {
   reviewed_today: number
 }
 
+const FlashcardItem = ({
+  card,
+  onRemove
+}: {
+  card: FlashcardWithVocabulary
+  onRemove: (id: string) => void
+}) => {
+  const [isFlipped, setIsFlipped] = useState(false)
+
+  return (
+    <motion.div
+      layout
+      initial={{ opacity: 0, scale: 0.9 }}
+      animate={{ opacity: 1, scale: 1 }}
+      exit={{ opacity: 0, scale: 0.9 }}
+      className="relative h-64 perspective-1000 cursor-pointer"
+      onClick={() => setIsFlipped(!isFlipped)}
+    >
+      <div className={`w-full h-full transition-all duration-500 transform-style-preserve-3d ${isFlipped ? 'rotate-y-180' : ''}`}>
+        {/* Front */}
+        <div className="absolute w-full h-full backface-hidden bg-black/40 backdrop-blur-md border border-white/10 rounded-2xl p-6 flex flex-col justify-center items-center text-center shadow-lg">
+          <button
+            onClick={(e) => { e.stopPropagation(); onRemove(card.id); }}
+            className="absolute top-4 right-4 p-2 text-slate-500 hover:text-rose-400 hover:bg-rose-500/10 rounded-lg transition-colors z-10"
+          >
+            <Trash2 className="w-5 h-5" />
+          </button>
+          <span className="absolute top-5 left-5 text-xs font-medium px-2.5 py-1 rounded-full bg-white/5 text-slate-400">
+            {card.vocabulary.level}
+          </span>
+          <h3 className="text-3xl font-bold text-indigo-300 mb-2">{card.vocabulary.word}</h3>
+          <p className="text-slate-500 text-sm">Chạm để lật</p>
+        </div>
+
+        {/* Back */}
+        <div className="absolute w-full h-full backface-hidden rotate-y-180 bg-gradient-to-br from-indigo-900/60 to-purple-900/60 backdrop-blur-md border border-indigo-500/30 rounded-2xl p-6 flex flex-col justify-center text-center shadow-[0_0_20px_rgba(99,102,241,0.2)]">
+          <h3 className="text-2xl font-bold text-white mb-4">{card.vocabulary.definition}</h3>
+          <p className="text-indigo-200 text-sm italic border-t border-white/10 pt-4">&quot;{card.vocabulary.example}&quot;</p>
+        </div>
+      </div>
+    </motion.div>
+  )
+}
+
 export default function FlashcardsPage() {
   const { user } = useAuth()
   const [cards, setCards] = useState<FlashcardWithVocabulary[]>([])
-  const [currentCardIndex, setCurrentCardIndex] = useState(0)
-  const [showAnswer, setShowAnswer] = useState(false)
   const [loading, setLoading] = useState(true)
-  const [reviewCompleted, setReviewCompleted] = useState(0)
   const [stats, setStats] = useState<Stats>({ total: 0, due: 0, reviewed_today: 0 })
+  const [activeTab, setActiveTab] = useState<'yours' | 'topics'>('yours')
 
   const supabase = createClient()
 
   useEffect(() => {
     if (user) {
-      loadDueCards()
+      loadCards()
       loadStats()
     }
   }, [user])
@@ -51,11 +95,10 @@ export default function FlashcardsPage() {
     setStats(data)
   }
 
-  const loadDueCards = async () => {
+  const loadCards = async () => {
     if (!user) return
 
     setLoading(true)
-    const now = new Date().toISOString()
 
     const { data, error } = await supabase
       .from('flashcards')
@@ -75,8 +118,7 @@ export default function FlashcardsPage() {
         )
       `)
       .eq('user_id', user.id)
-      .lte('next_review', now)
-      .order('next_review', { ascending: true })
+      .order('created_at', { ascending: false })
 
     if (data) {
       setCards(data as unknown as FlashcardWithVocabulary[])
@@ -84,254 +126,131 @@ export default function FlashcardsPage() {
     setLoading(false)
   }
 
-  const calculateNextReview = (
-    quality: number,
-    currentInterval: number,
-    currentEaseFactor: number,
-    currentRepetitions: number
-  ) => {
-    let interval = currentInterval
-    let easeFactor = currentEaseFactor
-    let repetitions = currentRepetitions
+  const removeFlashcard = async (id: string) => {
+    if (!user) return
 
-    if (quality >= 3) {
-      repetitions += 1
-
-      if (repetitions === 1) {
-        interval = 1
-      } else if (repetitions === 2) {
-        interval = 6
-      } else {
-        interval = Math.round(interval * easeFactor)
-      }
-
-      easeFactor = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02))
-      if (easeFactor < 1.3) {
-        easeFactor = 1.3
-      }
-    } else {
-      repetitions = 0
-      interval = 1
-    }
-
-    const nextReview = new Date()
-    nextReview.setDate(nextReview.getDate() + interval)
-
-    return {
-      next_review: nextReview.toISOString(),
-      interval_days: interval,
-      ease_factor: Number(easeFactor.toFixed(2)),
-      repetitions,
-    }
-  }
-
-  const handleReview = async (quality: number) => {
-    const currentCard = cards[currentCardIndex]
-    if (!currentCard || !user) return
-
-    const updateData = calculateNextReview(
-      quality,
-      currentCard.interval_days,
-      currentCard.ease_factor,
-      currentCard.repetitions
-    )
-
-    await supabase
+    const { error } = await supabase
       .from('flashcards')
-      .update(updateData)
-      .eq('id', currentCard.id)
+      .delete()
+      .eq('id', id)
 
-    // Update daily progress
-    await updateDailyProgress(user.id, { flashcards_reviewed: 1 })
-
-    setReviewCompleted(prev => prev + 1)
-
-    if (currentCardIndex < cards.length - 1) {
-      setCurrentCardIndex(prev => prev + 1)
-      setShowAnswer(false)
-    } else {
-      // Reload due cards and stats after finishing review session
-      await loadDueCards()
+    if (!error) {
+      setCards(cards.filter(c => c.id !== id))
       await loadStats()
-      setCurrentCardIndex(0)
-      setShowAnswer(false)
-      setReviewCompleted(0)
     }
   }
+
+  const topicDecks = [
+    { title: "IELTS Core Vocabulary", count: 500, color: "from-blue-500 to-indigo-600" },
+    { title: "Business English", count: 320, color: "from-emerald-500 to-teal-600" },
+    { title: "Science & Space", count: 150, color: "from-purple-500 to-fuchsia-600" },
+  ]
 
   if (loading) {
     return (
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Flashcards</h1>
-        <div className="bg-white p-8 rounded-lg shadow-md text-center text-gray-600">
+      <div className="max-w-6xl mx-auto">
+        <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3 mb-6">
+          <Layers className="w-8 h-8 text-indigo-400" />
+          Bộ Flashcards
+        </h1>
+        <div className="bg-black/40 backdrop-blur-md border border-white/10 p-8 rounded-2xl text-center text-slate-400">
           Đang tải flashcards...
         </div>
       </div>
     )
   }
 
-  if (cards.length === 0) {
-    return (
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-6">Flashcards</h1>
-
-        {/* Statistics */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-          <div className="bg-white p-4 rounded-lg shadow-md text-center">
-            <p className="text-sm text-gray-600">Tổng số thẻ</p>
-            <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow-md text-center">
-            <p className="text-sm text-gray-600">Cần review hôm nay</p>
-            <p className="text-3xl font-bold text-orange-600">{stats.due}</p>
-          </div>
-          <div className="bg-white p-4 rounded-lg shadow-md text-center">
-            <p className="text-sm text-gray-600">Đã review hôm nay</p>
-            <p className="text-3xl font-bold text-green-600">{stats.reviewed_today}</p>
-          </div>
+  return (
+    <div className="max-w-6xl mx-auto space-y-8">
+      <div className="flex flex-col md:flex-row justify-between items-center gap-6">
+        <div>
+          <h1 className="text-3xl font-bold text-slate-100 flex items-center gap-3">
+            <Layers className="w-8 h-8 text-indigo-400" />
+            Bộ Flashcards
+          </h1>
+          <p className="text-slate-400 mt-2">Học và ôn tập từ vựng mỗi ngày để duy trì chuỗi.</p>
         </div>
 
-        <div className="bg-white p-8 rounded-lg shadow-md text-center">
-          <div className="text-6xl mb-4">🎉</div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">Không có thẻ nào cần review</h2>
-          <p className="text-gray-600 mb-4">
-            Bạn đã hoàn thành tất cả flashcards hôm nay hoặc chưa lưu từ nào.
-          </p>
-          <a
-            href="/dictionary"
-            className="inline-block px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition"
+        <div className="flex bg-[#0f1123] p-1 rounded-xl border border-white/10">
+          <button
+            onClick={() => setActiveTab('yours')}
+            className={`px-6 py-2.5 rounded-lg font-medium transition-all ${
+              activeTab === 'yours'
+                ? 'bg-indigo-500/20 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.2)]'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
           >
-            Đi đến Từ Điển để thêm từ
-          </a>
+            Từ của bạn ({cards.length})
+          </button>
+          <button
+            onClick={() => setActiveTab('topics')}
+            className={`px-6 py-2.5 rounded-lg font-medium transition-all ${
+              activeTab === 'topics'
+                ? 'bg-indigo-500/20 text-indigo-300 shadow-[0_0_10px_rgba(99,102,241,0.2)]'
+                : 'text-slate-400 hover:text-slate-200'
+            }`}
+          >
+            Theo chủ đề
+          </button>
         </div>
       </div>
-    )
-  }
-
-  const currentCard = cards[currentCardIndex]
-  if (!currentCard) return null
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Flashcards</h1>
 
       {/* Statistics */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
-        <div className="bg-white p-4 rounded-lg shadow-md text-center">
-          <p className="text-sm text-gray-600">Tổng số thẻ</p>
-          <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="bg-black/40 backdrop-blur-md border border-white/10 p-6 rounded-2xl text-center">
+          <p className="text-sm text-slate-400 mb-2">Tổng số thẻ</p>
+          <p className="text-4xl font-bold text-blue-400">{stats.total}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-md text-center">
-          <p className="text-sm text-gray-600">Cần review hôm nay</p>
-          <p className="text-3xl font-bold text-orange-600">{stats.due}</p>
+        <div className="bg-black/40 backdrop-blur-md border border-white/10 p-6 rounded-2xl text-center">
+          <p className="text-sm text-slate-400 mb-2">Cần review hôm nay</p>
+          <p className="text-4xl font-bold text-orange-400">{stats.due}</p>
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-md text-center">
-          <p className="text-sm text-gray-600">Đã review hôm nay</p>
-          <p className="text-3xl font-bold text-green-600">{stats.reviewed_today + reviewCompleted}</p>
-        </div>
-      </div>
-
-      {/* Progress */}
-      <div className="bg-white p-4 rounded-lg shadow-md mb-6">
-        <div className="flex justify-between items-center mb-2">
-          <span className="text-sm font-medium text-gray-700">
-            Tiến độ: {currentCardIndex + 1} / {cards.length}
-          </span>
-          <span className="text-sm font-medium text-green-600">
-            Đã review: {reviewCompleted}
-          </span>
-        </div>
-        <div className="w-full bg-gray-200 rounded-full h-2">
-          <div
-            className="bg-blue-600 h-2 rounded-full transition-all duration-300"
-            style={{ width: `${((currentCardIndex + 1) / cards.length) * 100}%` }}
-          />
+        <div className="bg-black/40 backdrop-blur-md border border-white/10 p-6 rounded-2xl text-center">
+          <p className="text-sm text-slate-400 mb-2">Đã review hôm nay</p>
+          <p className="text-4xl font-bold text-green-400">{stats.reviewed_today}</p>
         </div>
       </div>
 
-      {/* Flashcard */}
-      <div className="bg-white rounded-lg shadow-md p-8 min-h-[400px] flex flex-col justify-center">
-        <div className="text-center">
-          <div className="mb-4">
-            <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-              {currentCard.vocabulary.level}
-            </span>
-          </div>
-
-          <h2 className="text-4xl font-bold text-gray-900 mb-2">
-            {currentCard.vocabulary.word}
-          </h2>
-          <p className="text-xl text-gray-600 italic mb-8">
-            {currentCard.vocabulary.pronunciation}
-          </p>
-
-          {showAnswer ? (
-            <div className="space-y-4">
-              <div className="p-4 bg-gray-50 rounded-lg">
-                <p className="text-lg text-gray-900 mb-2">
-                  <span className="font-semibold">Định nghĩa:</span> {currentCard.vocabulary.definition}
-                </p>
-                <p className="text-gray-700 italic">
-                  <span className="font-semibold not-italic">Ví dụ:</span> "{currentCard.vocabulary.example}"
-                </p>
-              </div>
-
-              <div className="mt-8">
-                <p className="text-sm text-gray-600 mb-4">Bạn nhớ từ này như thế nào?</p>
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
-                  <button
-                    onClick={() => handleReview(1)}
-                    className="px-4 py-3 bg-red-500 text-white rounded-lg font-semibold hover:bg-red-600 transition"
-                  >
-                    😵 Khó
-                  </button>
-                  <button
-                    onClick={() => handleReview(3)}
-                    className="px-4 py-3 bg-yellow-500 text-white rounded-lg font-semibold hover:bg-yellow-600 transition"
-                  >
-                    😐 Trung bình
-                  </button>
-                  <button
-                    onClick={() => handleReview(4)}
-                    className="px-4 py-3 bg-green-500 text-white rounded-lg font-semibold hover:bg-green-600 transition"
-                  >
-                    😊 Tốt
-                  </button>
-                  <button
-                    onClick={() => handleReview(5)}
-                    className="px-4 py-3 bg-blue-500 text-white rounded-lg font-semibold hover:bg-blue-600 transition"
-                  >
-                    🚀 Rất dễ
-                  </button>
-                </div>
-              </div>
+      {activeTab === 'yours' && (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {cards.length === 0 ? (
+            <div className="col-span-full py-20 text-center border-2 border-dashed border-white/10 rounded-2xl bg-black/20">
+              <BookOpen className="w-12 h-12 mx-auto text-slate-600 mb-4" />
+              <h3 className="text-xl font-medium text-slate-300 mb-2">Bạn chưa có từ nào</h3>
+              <p className="text-slate-500">Hãy vào phần Từ điển để tra và thêm từ vựng mới vào đây nhé.</p>
             </div>
           ) : (
-            <button
-              onClick={() => setShowAnswer(true)}
-              className="px-8 py-4 bg-blue-600 text-white rounded-lg font-semibold text-lg hover:bg-blue-700 transition"
-            >
-              Hiện đáp án
-            </button>
+            cards.map((card) => (
+              <FlashcardItem key={card.id} card={card} onRemove={removeFlashcard} />
+            ))
           )}
         </div>
-      </div>
+      )}
 
-      {/* Card stats */}
-      <div className="mt-6 grid grid-cols-1 md:grid-cols-3 gap-4">
-        <div className="bg-white p-4 rounded-lg shadow-md text-center">
-          <p className="text-sm text-gray-600">Lần lặp</p>
-          <p className="text-2xl font-bold text-gray-900">{currentCard.repetitions}</p>
+      {activeTab === 'topics' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {topicDecks.map((deck, idx) => (
+            <motion.div
+              key={idx}
+              whileHover={{ y: -5 }}
+              className="rounded-2xl p-6 cursor-pointer relative overflow-hidden group"
+            >
+              <div className={`absolute inset-0 bg-gradient-to-br opacity-80 group-hover:opacity-100 transition-opacity ${deck.color}`} />
+              <div className="relative z-10 flex flex-col h-full justify-between">
+                <div>
+                  <h3 className="text-2xl font-bold text-white mb-2">{deck.title}</h3>
+                  <p className="text-white/80">{deck.count} từ vựng</p>
+                </div>
+                <div className="mt-8 flex justify-end">
+                  <div className="w-10 h-10 rounded-full bg-white/20 flex items-center justify-center backdrop-blur-md group-hover:scale-110 transition-transform">
+                    <ArrowRight className="w-5 h-5 text-white" />
+                  </div>
+                </div>
+              </div>
+            </motion.div>
+          ))}
         </div>
-        <div className="bg-white p-4 rounded-lg shadow-md text-center">
-          <p className="text-sm text-gray-600">Khoảng cách</p>
-          <p className="text-2xl font-bold text-gray-900">{currentCard.interval_days} ngày</p>
-        </div>
-        <div className="bg-white p-4 rounded-lg shadow-md text-center">
-          <p className="text-sm text-gray-600">Độ dễ</p>
-          <p className="text-2xl font-bold text-gray-900">{currentCard.ease_factor}</p>
-        </div>
-      </div>
+      )}
     </div>
   )
 }

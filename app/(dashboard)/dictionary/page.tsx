@@ -1,9 +1,12 @@
 'use client'
 
 import { useState, useEffect } from 'react'
+import { Search, Volume2, Plus, Bookmark, Check } from 'lucide-react'
+import { motion, AnimatePresence } from 'framer-motion'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
 import { updateDailyProgress } from '@/lib/progress'
+import { cn } from '@/lib/utils'
 
 type Vocabulary = {
   id: string
@@ -22,10 +25,11 @@ export default function DictionaryPage() {
   const [loading, setLoading] = useState(false)
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set())
   const [searchHistory, setSearchHistory] = useState<string[]>([])
+  const [selectedWord, setSelectedWord] = useState<Vocabulary | null>(null)
+  const [searched, setSearched] = useState(false)
 
   const supabase = createClient()
 
-  // Load saved words and search history
   useEffect(() => {
     if (user) {
       loadSavedWords()
@@ -62,34 +66,33 @@ export default function DictionaryPage() {
   }
 
   const searchWords = async () => {
+    if (!searchQuery.trim()) return
+
     setLoading(true)
+    setSearched(true)
 
     let query = supabase
       .from('vocabulary')
       .select('*')
+      .ilike('word', `${searchQuery}%`)
       .order('word', { ascending: true })
-      .limit(50)
-
-    if (searchQuery) {
-      query = query.ilike('word', `${searchQuery}%`)
-      saveSearchHistory(searchQuery)
-    }
+      .limit(1)
 
     if (selectedLevel !== 'all') {
       query = query.eq('level', selectedLevel)
     }
 
-    const { data, error } = await query
+    const { data } = await query
 
-    if (data) {
-      setWords(data)
+    if (data && data.length > 0) {
+      setSelectedWord(data[0])
+      saveSearchHistory(searchQuery)
+    } else {
+      setSelectedWord(null)
     }
+
     setLoading(false)
   }
-
-  useEffect(() => {
-    searchWords()
-  }, [selectedLevel])
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault()
@@ -117,133 +120,125 @@ export default function DictionaryPage() {
       }
     } else {
       setSavedWords(prev => new Set(prev).add(vocabularyId))
-
-      // Update daily progress
       await updateDailyProgress(user.id, { words_learned: 1 })
-
       alert('Đã lưu vào flashcards!')
     }
   }
 
   return (
-    <div className="max-w-4xl mx-auto">
-      <h1 className="text-3xl font-bold mb-6">Từ Điển</h1>
+    <div className="max-w-4xl mx-auto space-y-8">
+      <div className="text-center space-y-4 mb-12">
+        <h1 className="text-4xl font-bold bg-clip-text text-transparent bg-gradient-to-r from-indigo-400 to-purple-400">
+          Từ Điển Vũ Trụ
+        </h1>
+        <p className="text-slate-400">Tra cứu nhanh chóng. Từ Anh-Việt kèm ví dụ.</p>
+      </div>
 
-      {/* Search Form */}
-      <div className="bg-white p-6 rounded-lg shadow-md mb-6">
-        <form onSubmit={handleSearch} className="space-y-4">
-          <div>
-            <label htmlFor="search" className="block text-sm font-medium text-gray-700 mb-2">
-              Tìm kiếm từ vựng
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="text"
-                id="search"
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                placeholder="Nhập từ cần tìm..."
-                className="flex-1 px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-              />
-              <button
-                type="submit"
-                disabled={loading}
-                className="px-6 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition disabled:opacity-50"
-              >
-                {loading ? 'Đang tìm...' : 'Tìm kiếm'}
-              </button>
-            </div>
+      <form onSubmit={handleSearch} className="relative group">
+        <div className="absolute inset-y-0 left-4 flex items-center pointer-events-none">
+          <Search className="h-6 w-6 text-indigo-400 group-focus-within:text-indigo-300 transition-colors" />
+        </div>
+        <input
+          type="text"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          placeholder="Nhập từ cần tra cứu..."
+          className="w-full bg-[#0f1123] border-2 border-white/10 rounded-2xl py-5 pl-14 pr-6 text-lg text-slate-100 placeholder:text-slate-500 focus:outline-none focus:border-indigo-500/50 shadow-[0_0_30px_rgba(0,0,0,0.5)] transition-all"
+        />
+        <button
+          type="submit"
+          disabled={loading}
+          className="absolute inset-y-2 right-2 bg-indigo-500 hover:bg-indigo-600 text-white px-6 rounded-xl font-medium transition-colors disabled:opacity-50"
+        >
+          {loading ? 'Đang tìm...' : 'Tra từ'}
+        </button>
+      </form>
 
-            {/* Search History */}
-            {searchHistory.length > 0 && (
-              <div className="mt-2 flex flex-wrap gap-2">
-                <span className="text-xs text-gray-500">Gần đây:</span>
-                {searchHistory.slice(0, 5).map((term, idx) => (
-                  <button
-                    key={idx}
-                    type="button"
-                    onClick={() => {
-                      setSearchQuery(term)
-                      searchWords()
-                    }}
-                    className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition"
-                  >
-                    {term}
-                  </button>
-                ))}
+      {/* Search History */}
+      {searchHistory.length > 0 && (
+        <div className="flex flex-wrap gap-2 items-center">
+          <span className="text-xs text-slate-500">Gần đây:</span>
+          {searchHistory.slice(0, 5).map((term, idx) => (
+            <button
+              key={idx}
+              type="button"
+              onClick={() => {
+                setSearchQuery(term)
+              }}
+              className="text-xs px-3 py-1.5 bg-white/5 border border-white/10 text-slate-300 rounded-full hover:bg-white/10 transition-colors"
+            >
+              {term}
+            </button>
+          ))}
+        </div>
+      )}
+
+      <AnimatePresence mode="wait">
+        {searched && (
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            className="bg-[#0f1123] border border-white/10 rounded-3xl p-8 shadow-2xl relative overflow-hidden"
+          >
+            {/* Decorative blob */}
+            <div className="absolute -top-24 -right-24 w-48 h-48 bg-indigo-500/10 rounded-full blur-3xl pointer-events-none" />
+
+            {selectedWord ? (
+              <div className="space-y-8 relative z-10">
+                <div className="flex justify-between items-start">
+                  <div>
+                    <h2 className="text-4xl font-bold text-slate-100 mb-2 flex items-end gap-4">
+                      {selectedWord.word}
+                      <span className="text-xl font-normal text-indigo-300">{selectedWord.pronunciation}</span>
+                    </h2>
+                    <span className="inline-block px-3 py-1 bg-white/5 border border-white/10 rounded-full text-sm text-slate-300">
+                      {selectedWord.level}
+                    </span>
+                  </div>
+                  <div className="flex gap-3">
+                    <button className="p-3 rounded-xl bg-white/5 hover:bg-white/10 text-indigo-300 transition-colors">
+                      <Volume2 className="w-6 h-6" />
+                    </button>
+                    <button
+                      onClick={() => saveToFlashcards(selectedWord.id)}
+                      disabled={savedWords.has(selectedWord.id)}
+                      className={cn(
+                        "flex items-center gap-2 px-4 py-3 rounded-xl font-medium transition-all",
+                        savedWords.has(selectedWord.id)
+                          ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 cursor-not-allowed"
+                          : "bg-indigo-500 hover:bg-indigo-600 text-white shadow-[0_0_15px_rgba(99,102,241,0.4)]"
+                      )}
+                    >
+                      {savedWords.has(selectedWord.id) ? <Check className="w-5 h-5" /> : <Plus className="w-5 h-5" />}
+                      {savedWords.has(selectedWord.id) ? "Đã thêm" : "Thêm vào Flashcard"}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="pt-6 border-t border-white/10">
+                  <h3 className="text-lg font-semibold text-indigo-400 flex items-center gap-2 mb-4">
+                    <Bookmark className="w-5 h-5" />
+                    Định nghĩa
+                  </h3>
+                  <p className="text-slate-300 leading-relaxed text-lg">{selectedWord.definition}</p>
+                </div>
+
+                <div className="bg-indigo-950/30 border border-indigo-500/20 rounded-2xl p-6">
+                  <h4 className="text-sm font-semibold text-indigo-300 uppercase tracking-wider mb-2">Ví dụ (Example)</h4>
+                  <p className="text-xl text-slate-200 italic font-serif">&quot;{selectedWord.example}&quot;</p>
+                </div>
+              </div>
+            ) : (
+              <div className="text-center py-12 text-slate-400">
+                <Search className="w-12 h-12 mx-auto mb-4 opacity-20" />
+                <p className="text-xl">Không tìm thấy từ này trong cơ sở dữ liệu.</p>
+                <p className="text-sm mt-2">Vui lòng kiểm tra lại chính tả hoặc thử một từ khác.</p>
               </div>
             )}
-          </div>
-
-          <div>
-            <label htmlFor="level" className="block text-sm font-medium text-gray-700 mb-2">
-              Lọc theo trình độ
-            </label>
-            <select
-              id="level"
-              value={selectedLevel}
-              onChange={(e) => setSelectedLevel(e.target.value)}
-              className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            >
-              <option value="all">Tất cả</option>
-              <option value="A1">A1 - Beginner</option>
-              <option value="A2">A2 - Elementary</option>
-              <option value="B1">B1 - Intermediate</option>
-              <option value="B2">B2 - Upper Intermediate</option>
-              <option value="C1">C1 - Advanced</option>
-              <option value="C2">C2 - Proficiency</option>
-            </select>
-          </div>
-        </form>
-      </div>
-
-      {/* Results */}
-      <div className="space-y-4">
-        {loading ? (
-          <div className="text-center py-8 text-gray-600">Đang tải...</div>
-        ) : words.length === 0 ? (
-          <div className="bg-white p-6 rounded-lg shadow-md text-center text-gray-600">
-            Không tìm thấy từ vựng nào. Thử tìm kiếm khác hoặc chọn trình độ khác.
-          </div>
-        ) : (
-          words.map((word) => (
-            <div key={word.id} className="bg-white p-6 rounded-lg shadow-md">
-              <div className="flex items-start justify-between mb-3">
-                <div>
-                  <h3 className="text-2xl font-bold text-gray-900">{word.word}</h3>
-                  <p className="text-gray-600 italic">{word.pronunciation}</p>
-                </div>
-                <div className="flex items-center gap-2">
-                  <span className="px-3 py-1 bg-blue-100 text-blue-800 rounded-full text-sm font-medium">
-                    {word.level}
-                  </span>
-                  <button
-                    onClick={() => saveToFlashcards(word.id)}
-                    disabled={savedWords.has(word.id)}
-                    className={`px-4 py-2 rounded-lg font-semibold transition ${
-                      savedWords.has(word.id)
-                        ? 'bg-gray-200 text-gray-500 cursor-not-allowed'
-                        : 'bg-green-600 text-white hover:bg-green-700'
-                    }`}
-                  >
-                    {savedWords.has(word.id) ? '✓ Đã lưu' : '+ Lưu'}
-                  </button>
-                </div>
-              </div>
-              <div className="space-y-2">
-                <div>
-                  <span className="font-semibold text-gray-700">Định nghĩa: </span>
-                  <span className="text-gray-900">{word.definition}</span>
-                </div>
-                <div>
-                  <span className="font-semibold text-gray-700">Ví dụ: </span>
-                  <span className="text-gray-900 italic">&quot;{word.example}&quot;</span>
-                </div>
-              </div>
-            </div>
-          ))
+          </motion.div>
         )}
-      </div>
+      </AnimatePresence>
     </div>
   )
 }

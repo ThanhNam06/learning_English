@@ -12,7 +12,8 @@
       "Bash(npm install *)",
       "Bash(vercel *)",
       "Bash(curl *)",
-      "Bash(node *)"
+      "Bash(node *)",
+      "Bash(claude mcp *)"
     ]
   }
 }
