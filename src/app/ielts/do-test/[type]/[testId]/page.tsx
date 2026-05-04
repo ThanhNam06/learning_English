@@ -1,6 +1,6 @@
 'use client'
 
-import { MainLayout } from '../../../components/layout/MainLayout'
+import { MainLayout } from '../../components/layout/MainLayout'
 
 export default function IELTSTest({ params }: { params: { type: string, testId: string } }) {
   return (
