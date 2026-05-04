@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
+import { updateDailyProgress, getFlashcardStats } from '@/lib/progress'
 
 type FlashcardWithVocabulary = {
   id: string
@@ -20,6 +21,12 @@ type FlashcardWithVocabulary = {
   }
 }
 
+type Stats = {
+  total: number
+  due: number
+  reviewed_today: number
+}
+
 export default function FlashcardsPage() {
   const { user } = useAuth()
   const [cards, setCards] = useState<FlashcardWithVocabulary[]>([])
@@ -27,14 +34,22 @@ export default function FlashcardsPage() {
   const [showAnswer, setShowAnswer] = useState(false)
   const [loading, setLoading] = useState(true)
   const [reviewCompleted, setReviewCompleted] = useState(0)
+  const [stats, setStats] = useState<Stats>({ total: 0, due: 0, reviewed_today: 0 })
 
   const supabase = createClient()
 
   useEffect(() => {
     if (user) {
       loadDueCards()
+      loadStats()
     }
   }, [user])
+
+  const loadStats = async () => {
+    if (!user) return
+    const data = await getFlashcardStats(user.id)
+    setStats(data)
+  }
 
   const loadDueCards = async () => {
     if (!user) return
@@ -112,7 +127,7 @@ export default function FlashcardsPage() {
 
   const handleReview = async (quality: number) => {
     const currentCard = cards[currentCardIndex]
-    if (!currentCard) return
+    if (!currentCard || !user) return
 
     const updateData = calculateNextReview(
       quality,
@@ -126,14 +141,18 @@ export default function FlashcardsPage() {
       .update(updateData)
       .eq('id', currentCard.id)
 
+    // Update daily progress
+    await updateDailyProgress(user.id, { flashcards_reviewed: 1 })
+
     setReviewCompleted(prev => prev + 1)
 
     if (currentCardIndex < cards.length - 1) {
       setCurrentCardIndex(prev => prev + 1)
       setShowAnswer(false)
     } else {
-      // Reload due cards after finishing review session
-      loadDueCards()
+      // Reload due cards and stats after finishing review session
+      await loadDueCards()
+      await loadStats()
       setCurrentCardIndex(0)
       setShowAnswer(false)
       setReviewCompleted(0)
@@ -155,6 +174,23 @@ export default function FlashcardsPage() {
     return (
       <div className="max-w-4xl mx-auto">
         <h1 className="text-3xl font-bold mb-6">Flashcards</h1>
+
+        {/* Statistics */}
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+          <div className="bg-white p-4 rounded-lg shadow-md text-center">
+            <p className="text-sm text-gray-600">Tổng số thẻ</p>
+            <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-md text-center">
+            <p className="text-sm text-gray-600">Cần review hôm nay</p>
+            <p className="text-3xl font-bold text-orange-600">{stats.due}</p>
+          </div>
+          <div className="bg-white p-4 rounded-lg shadow-md text-center">
+            <p className="text-sm text-gray-600">Đã review hôm nay</p>
+            <p className="text-3xl font-bold text-green-600">{stats.reviewed_today}</p>
+          </div>
+        </div>
+
         <div className="bg-white p-8 rounded-lg shadow-md text-center">
           <div className="text-6xl mb-4">🎉</div>
           <h2 className="text-2xl font-bold text-gray-900 mb-2">Không có thẻ nào cần review</h2>
@@ -178,6 +214,22 @@ export default function FlashcardsPage() {
   return (
     <div className="max-w-4xl mx-auto">
       <h1 className="text-3xl font-bold mb-6">Flashcards</h1>
+
+      {/* Statistics */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+        <div className="bg-white p-4 rounded-lg shadow-md text-center">
+          <p className="text-sm text-gray-600">Tổng số thẻ</p>
+          <p className="text-3xl font-bold text-blue-600">{stats.total}</p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow-md text-center">
+          <p className="text-sm text-gray-600">Cần review hôm nay</p>
+          <p className="text-3xl font-bold text-orange-600">{stats.due}</p>
+        </div>
+        <div className="bg-white p-4 rounded-lg shadow-md text-center">
+          <p className="text-sm text-gray-600">Đã review hôm nay</p>
+          <p className="text-3xl font-bold text-green-600">{stats.reviewed_today + reviewCompleted}</p>
+        </div>
+      </div>
 
       {/* Progress */}
       <div className="bg-white p-4 rounded-lg shadow-md mb-6">

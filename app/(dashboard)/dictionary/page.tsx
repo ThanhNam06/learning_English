@@ -3,6 +3,7 @@
 import { useState, useEffect } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/hooks/useAuth'
+import { updateDailyProgress } from '@/lib/progress'
 
 type Vocabulary = {
   id: string
@@ -20,13 +21,15 @@ export default function DictionaryPage() {
   const [words, setWords] = useState<Vocabulary[]>([])
   const [loading, setLoading] = useState(false)
   const [savedWords, setSavedWords] = useState<Set<string>>(new Set())
+  const [searchHistory, setSearchHistory] = useState<string[]>([])
 
   const supabase = createClient()
 
-  // Load saved words
+  // Load saved words and search history
   useEffect(() => {
     if (user) {
       loadSavedWords()
+      loadSearchHistory()
     }
   }, [user])
 
@@ -43,6 +46,21 @@ export default function DictionaryPage() {
     }
   }
 
+  const loadSearchHistory = () => {
+    const history = localStorage.getItem('search_history')
+    if (history) {
+      setSearchHistory(JSON.parse(history))
+    }
+  }
+
+  const saveSearchHistory = (query: string) => {
+    if (!query.trim()) return
+
+    const history = [query, ...searchHistory.filter(q => q !== query)].slice(0, 10)
+    setSearchHistory(history)
+    localStorage.setItem('search_history', JSON.stringify(history))
+  }
+
   const searchWords = async () => {
     setLoading(true)
 
@@ -54,6 +72,7 @@ export default function DictionaryPage() {
 
     if (searchQuery) {
       query = query.ilike('word', `${searchQuery}%`)
+      saveSearchHistory(searchQuery)
     }
 
     if (selectedLevel !== 'all') {
@@ -98,6 +117,10 @@ export default function DictionaryPage() {
       }
     } else {
       setSavedWords(prev => new Set(prev).add(vocabularyId))
+
+      // Update daily progress
+      await updateDailyProgress(user.id, { words_learned: 1 })
+
       alert('Đã lưu vào flashcards!')
     }
   }
@@ -130,6 +153,26 @@ export default function DictionaryPage() {
                 {loading ? 'Đang tìm...' : 'Tìm kiếm'}
               </button>
             </div>
+
+            {/* Search History */}
+            {searchHistory.length > 0 && (
+              <div className="mt-2 flex flex-wrap gap-2">
+                <span className="text-xs text-gray-500">Gần đây:</span>
+                {searchHistory.slice(0, 5).map((term, idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => {
+                      setSearchQuery(term)
+                      searchWords()
+                    }}
+                    className="text-xs px-2 py-1 bg-gray-100 text-gray-700 rounded hover:bg-gray-200 transition"
+                  >
+                    {term}
+                  </button>
+                ))}
+              </div>
+            )}
           </div>
 
           <div>
