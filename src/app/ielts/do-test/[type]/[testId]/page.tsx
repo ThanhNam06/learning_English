@@ -1,8 +1,8 @@
-'use client'
-
 import { MainLayout } from '@/app/components/layout/MainLayout'
 
-export default function IELTSTest({ params }: { params: { type: string, testId: string } }) {
+export default async function IELTSTest({ params }: { params: Promise<{ type: string; testId: string }> }) {
+  const { type, testId } = await params
+
   return (
     <MainLayout>
       <div className="max-w-6xl mx-auto">
