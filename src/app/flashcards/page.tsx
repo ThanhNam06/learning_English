@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { motion } from 'motion/react'
-import { MainLayout } from '../components/layout/MainLayout'
+import { MainLayout } from '@/app/components/layout/MainLayout'
 import { Layers, Trash2, ArrowRight, BookOpen } from 'lucide-react'
 
 const FlashcardItem = ({ word, removeFlashcard }: { word: any, removeFlashcard: (id: string) => void }) => {

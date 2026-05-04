@@ -1,4 +1,4 @@
-import { MainLayout } from '../components/layout/MainLayout'
+import { MainLayout } from '@/app/components/layout/MainLayout'
 import { Crown } from 'lucide-react'
 
 export default function Upgrade() {

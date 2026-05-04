@@ -1,6 +1,6 @@
 'use client'
 
-import { MainLayout } from '../components/layout/MainLayout'
+import { MainLayout } from '@/app/components/layout/MainLayout'
 import { Sparkles } from 'lucide-react'
 
 export default function AITutor() {

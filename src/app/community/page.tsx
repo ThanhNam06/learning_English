@@ -1,4 +1,4 @@
-import { MainLayout } from '../components/layout/MainLayout'
+import { MainLayout } from '@/app/components/layout/MainLayout'
 import { Users } from 'lucide-react'
 
 export default function Community() {
